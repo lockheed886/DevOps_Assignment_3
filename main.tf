@@ -27,7 +27,8 @@ module "vpc" {
 
 module "security" {
   source      = "./modules/security"
-  vpc_id      = module.vpc.vpc_id # Reference from VPC module
+  vpc_id      = module.vpc.vpc_id
+  alb_sg_id   = aws_security_group.alb_sg.id 
   environment = "prod"
 }
 
@@ -44,4 +45,58 @@ module "compute" {
 resource "aws_key_pair" "deployer" {
   key_name   = "devops_key"
   public_key = file("${path.module}/devops_key.pub") 
+}
+# 1. Security Group for the ALB
+resource "aws_security_group" "alb_sg" {
+  name        = "alb-security-group"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Open to the world
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# 2. Application Load Balancer
+resource "aws_lb" "web_alb" {
+  name               = "devops-web-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = module.vpc.public_subnet_ids # Spans both public subnets
+}
+
+# 3. Target Group with Health Checks
+resource "aws_lb_target_group" "web_tg" {
+  name     = "web-target-group"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = module.vpc.vpc_id
+
+  health_check {
+    path                = "/"
+    healthy_threshold   = 2 # Requirement
+    unhealthy_threshold = 3 # Requirement
+  }
+}
+
+# 4. Listener
+resource "aws_lb_listener" "web_listener" {
+  load_balancer_arn = aws_lb.web_alb.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_tg.arn
+  }
 }
