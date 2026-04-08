@@ -5,6 +5,15 @@ terraform {
       version = "~> 5.0"
     }
   }
+  
+  # Backend configuration for Remote State
+  backend "s3" {
+    bucket         = "devops-state-bucket-22f-3664"
+    key            = "devops/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "devops-state-locks-22f-3664"
+    encrypt        = true
+  }
 }
 
 # Configure the AWS Provider
@@ -16,6 +25,10 @@ provider "aws" {
 data "aws_availability_zones" "available" {
   state = "available"
 }
+
+# ------------------------------------------------------------------
+# TASK 1: Custom VPC, Subnets, and NAT Gateway
+# ------------------------------------------------------------------
 
 # 1. Custom VPC
 resource "aws_vpc" "main" {
@@ -149,7 +162,10 @@ resource "aws_route_table_association" "private_2_assoc" {
   route_table_id = aws_route_table.private_rt.id
 }
 
-# 9. Outputs
+# ------------------------------------------------------------------
+# OUTPUTS
+# ------------------------------------------------------------------
+
 output "vpc_id" {
   value = aws_vpc.main.id
 }
